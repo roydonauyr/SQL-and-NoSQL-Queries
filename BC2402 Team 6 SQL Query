@@ -1,0 +1,269 @@
+/* Importing instructions: 
+Head to Server -> Data Import -> Import from Self Contained File -> Start Import */
+# ---------------------------------------------------------------------------------------------------
+
+USE country_vaccinations;
+
+# ---------------------------------------------------------------------------------------------------
+# Qn 1: What is the total population in Asia?
+
+# Take note, we filtered based on location instead of continent. Further explanation can be found below.
+SELECT DISTINCT(population) FROM covid19data
+WHERE location = "Asia";
+# ANS: Total population of Asia is 4,639,847,425.
+
+# Further explanation for choosing to filter based on location: 
+/* In the query below, continent was considered since continent also consists of countries in Asia. 
+Resulting total population for Asia is smaller (4,614,068,610) than above. */ 
+SELECT SUM(DISTINCT(population)) FROM covid19data
+WHERE continent = "Asia";
+
+/* This is because, in this table, there are only 50 continents. However, Asia should contain 51 locations. 
+However, in this table, there are only 50 locations. We discovered that North Korea is not included as a location. 
+Data accuracy and integrity of this column is compromised. Hence, it would be inaccurate to filter based on continents. */
+SELECT DISTINCT(location) FROM covid19data
+WHERE continent = "Asia"
+ORDER BY location;
+
+# ---------------------------------------------------------------------------------------------------
+# Qn 2: What is the total population among the ten ASEAN countries?
+/* Where ASEAN countries are Brunei, Myanmar, Cambodia, Indonesia, Laos, Malaysia,
+Philippines, Singapore, Thailand and Vietnam */
+
+# Provided all countries have distinct population(???)
+SELECT SUM(DISTINCT(population)) AS total_population FROM covid19data
+WHERE location IN ("Brunei", "Myanmar", "Cambodia", "Indonesia", "Laos", 
+"Malaysia", "Philippines", "Singapore", "Thailand", "Vietnam");
+# ANS: Total population among the ten ASEAN countries is 667,301,412.
+
+# ---------------------------------------------------------------------------------------------------
+# Qn 3: Generate a list of unique data sources (source_name)
+
+SELECT DISTINCT(source_name) FROM country_vaccinations
+ORDER BY source_name;
+# ANS: As seen, vaccination data originate from 92 unique sources.
+
+# ---------------------------------------------------------------------------------------------------
+# Qn 4: Specific to Singapore, display the daily total_vaccinations starting (inclusive) March-1 2021 through (inclusive) May-31 2021
+
+SELECT date, daily_vaccinations FROM country_vaccinations
+WHERE country = "Singapore" AND date BETWEEN "3/1/2021" AND "5/31/2021";
+
+/* We chose to use 'daily_vaccinations' attribute instead of 'total_vaccinations' attribute. 
+We do not advise using the 'total_vaccinations' attribute because there are many values of '0'. 
+This implies that the total_vaccinations attribute may not be updated on a daily basis. Hence,
+using the 'total_vaccinations' attribute may result in inaccurate and unreliable results. 
+Using 'daily_vaccinations' attribute, we will be able to find total vaccinations for each day in Singapore.*/
+
+# ---------------------------------------------------------------------------------------------------
+# Qn 5: When is the first batch of vaccinations recorded in Singapore? 
+
+SELECT date, total_vaccinations FROM covid19data
+WHERE total_vaccinations > 0 AND location = "Singapore"
+ORDER BY date ASC
+LIMIT 1;
+# ANS: The first batch of vaccinations was recorded on 2021-01-11 (11 Jan 2021) in Singapore.
+
+/* To verify that the above information regarding total_vaccinations and its date is accurate, we 
+compare it with total_vaccinations data in the country_vaccinations table as seen in the query below. */
+SELECT total_vaccinations, date FROM country_vaccinations
+WHERE total_vaccinations > 0 AND country = "Singapore"
+ORDER BY date ASC
+LIMIT 1;
+/* As seen, total_vaccinations amount of 3400 and date in the country_vaccinations table corresponds to the 
+total_vaccinations amount and date in the covid19data table. The consistency in data across 2 tables further support
+that the information obtained from the covid19data table is accurate. */
+
+# ---------------------------------------------------------------------------------------------------
+/* Qn 6: Based on the date identified in (5), specific to Singapore, compute the total number of new cases thereafter
+For instance, if the date identified in (5) is Jan-1 2021, the total number of new cases will be the sum of new cases 
+starting from (inclusive) Jan-1 to the last date in the dataset. */
+
+# From the above query in qn 5, the date identified for the first batch of vaccinations in Singapore was 11 Jan 2021
+SELECT SUM(new_cases) FROM covid19data
+WHERE date >= "2021-01-11" AND location = "Singapore";
+# ANS: The total number of new cases from 11 Jan 2021 onwards, and including 11 Jan 2021, will amount to 3,710 cases in Singapore. 
+
+# ---------------------------------------------------------------------------------------------------
+/* Qn 7: Compute the total number of new cases in Singapore before the date identified in (5). For instance, if the 
+date identified in (5) is Jan-1 2021 and the first date recorded (in Singapore) in the dataset is Feb-1 2020, the 
+total number of new cases will be the sum of new cases starting from (inclusive) Feb-1 2020 through (inclusive) 
+Dec-31 2020. */
+
+# From the above query in qn 5, the date identified for the first batch of vaccinations in Singapore was 11 Jan 2021
+SELECT SUM(new_cases) FROM covid19data
+WHERE date < "2021-01-11" AND location = "Singapore";
+# ANS: The total number of new cases in Singapore will amount to 58,907, for all dates before 11 Jan 2021. 
+
+# ---------------------------------------------------------------------------------------------------
+/* Qn 8: Herd immunity estimation. On a daily basis, specific to Germany, calculate the percentage of new cases 
+(i.e., percentage of new cases = new cases / populations) and total vaccinations on each available vaccine 
+in relation to its population */
+
+# Method 1: Using VIEWS
+# Check that VIEWS have not yet been created
+drop VIEW if EXISTS percentageNew;
+drop VIEW if EXISTS vaccinations;
+
+# 2 views are created to filter out only the relevant information need that is related to Germany. 
+# This view created contains information on the daily percentage of new cases in Germany.
+CREATE VIEW percentageNew
+AS
+SELECT (new_cases/population)*100 AS percentages, date FROM covid19data
+WHERE location = "Germany"
+GROUP BY date
+ORDER BY date;
+
+# This view created contains information on the total vaccination of each available vaccine in Germany.
+CREATE VIEW vaccinations
+AS 
+SELECT total_vaccinations, vaccine, date FROM country_vaccinations_by_manufacturer
+WHERE location = "Germany"
+GROUP BY date, vaccine
+ORDER BY date;
+/* Take note, there is an inconsistency in dates for covid19data table and country_vaccinations_by_manufacturer table.
+The covid19data table records a larger range of dates than the country_vaccinations_by_manufacturer table. This is 
+because the first date recorded in covid19data table for Germany is earlier than the first date recorded in 
+country_vaccinations_by_manufacturer table for Germany. */
+
+# Display the herd immunity estimation for Germany
+SELECT percentages, percentageNew.date, total_vaccinations, vaccine 
+FROM percentageNew LEFT JOIN vaccinations ON percentageNew.date = vaccinations.date
+GROUP BY percentageNew.date, vaccine
+ORDER BY percentageNew.date;
+/* While the covid19data table has a larger range of dates for Germany, majority of the information seems to be
+missing until 2020-12-27. This includes data such as 'total_vaccinations' data. This implies that Germany may actually
+have more total_vaccinations data before 2020-12-27, which has not been updated or recorded yet. Hence, 
+'total_vaccinations' data will be recorded as null in Germany for dates before 2020-12-27 when finding
+the herd immunity estimation. It is important to still take note of and record these dates to be mindful that 
+Germany may have more data contributing to Germany's total_vaccinations data that has not yet been updated. */
+
+
+# Method 2: Without using VIEWS 
+# The difference between this method (method 2) and method 1 above, is that method 2 does not display NULL values.
+# This method is less accurate than above. Further explanation below.
+SELECT new_cases/population*100, covid19data.date, country_vaccinations_by_manufacturer.total_vaccinations, vaccine FROM covid19data 
+JOIN country_vaccinations_by_manufacturer ON covid19data.date = country_vaccinations_by_manufacturer.date
+WHERE covid19data.location = "Germany" AND country_vaccinations_by_manufacturer.location = "Germany"
+GROUP BY covid19data.date, vaccine
+ORDER BY covid19data.date;
+/* When VIEWS are not used, this resulting query implies that the earliest data being recorded in Germany 
+only begins from 2020-12-27. However, this is not the case. This is misleading as it could inaccurately
+imply that the dates before 2020-12-27 are irrelevant and do not contribute total_vaccination date in Germany
+at all. As mentioned above, this is not an accurate assumption. */
+
+# ---------------------------------------------------------------------------------------------------
+/* Qn 9: Vaccination Drivers. Specific to Germany, based on each daily new case, 
+display the total vaccinations of each available vaccines after 20 days, 30 days, and 40 days. */
+
+# Check that VIEWS have not yet been created
+drop VIEW if EXISTS new_cases_dates;
+drop VIEW if EXISTS vac_type;
+
+# 2 views are created to filter out only the relevant information need that is related to Germany. 
+# This view created contains information on the dates of each daily new_case in Germany and the corresponding dates after 20 days, 30 days and 40 days. 
+CREATE VIEW new_cases_dates (date, new_cases, 20days, 30days, `40days`)
+AS
+SELECT date, new_cases, date + INTERVAL +20 DAY AS 20days, date + INTERVAL +30 DAY AS 30days,
+date + INTERVAL +40 DAY AS 40days
+FROM covid19data
+WHERE new_cases > 0 AND location = 'Germany';
+
+# This view created contains total_vaccinations (accumulated) of each available vaccine for each day in Germany.
+CREATE VIEW vac_type (date, total_vaccinations, vaccine)
+AS
+SELECT date, total_vaccinations, vaccine
+FROM country_vaccinations_by_manufacturer
+WHERE location = 'Germany';
+
+# Displays the total_vaccinations of each available vaccine in Germany after 20 days.
+SELECT t1.date, 20days, total_vaccinations, vaccine
+FROM new_cases_dates t1
+LEFT JOIN vac_type t2 ON t1.`20days` = t2.date
+ORDER BY t1.date;
+
+# Displays the total_vaccinations of each available vaccine in Germany after 30 days.
+SELECT t1.date, 30days, total_vaccinations, t2.vaccine
+FROM new_cases_dates t1
+LEFT JOIN vac_type t2 ON t1.`30days` = t2.date
+ORDER BY t1.date;
+
+# Displays the total_vaccinations of each available vaccine in Germany after 40 days.
+SELECT t1.date, 40days, total_vaccinations, t2.vaccine
+FROM new_cases_dates t1
+LEFT JOIN vac_type t2 ON t1.`40days` = t2.date
+ORDER BY t1.date;
+
+# ---------------------------------------------------------------------------------------------------
+/* Qn 10: Vaccination Effects. Specific to Germany, on a daily basis, based on the total number of accumulated 
+vaccinations (sum of total_vaccinations of each vaccine in a day), generate the daily new cases after 21 days, 
+60 days, and 120 days.*/
+
+# Check that VIEWS have not yet been created
+drop VIEW if EXISTS total_vac_dates;
+drop VIEW if EXISTS cases_dates;
+
+#Inconsistencies between total_vaccinations, hence country_vaccinations_by_manufacturer was selected instead since there were many missing values in covid19data
+SELECT date, total_vaccinations FROM covid19data
+WHERE location = "Germany" AND date >= '2020-12-27';
+
+# 2 views are created to filter out only the relevant information need that is related to Germany. 
+# This view created contains information on the total number of accumulated vaccinations for each day.
+# Take note, the table used here is country_vaccinations_by_manufacturer instead of covid19data table. Explanation below.
+CREATE VIEW total_vac_dates (date, total_vac)
+AS
+SELECT date, SUM(total_vaccinations)
+FROM country_vaccinations_by_manufacturer
+WHERE location = 'Germany' 
+GROUP BY date;
+/* We observed that country_vaccinations_by_manufacturer table also contains total_vaccinations data. However,
+as mentioned in qn 8, this table has alot of missing information. This includes missing information for 
+'total_vaccinations'. Missing information could imply that data has not been updated or that particular data
+just does not exist. As such, this table with missing values is ambiguous and not reliable. Hence, we would advise
+the use of covid19data instead, as the table contains relatively more completed information. Query continues below. */
+
+# This view created contains all dates in Germany, where there are daily new_cases
+CREATE VIEW cases_dates (date, new_cases)
+AS
+SELECT date AS dates_w_cases, new_cases
+FROM covid19data
+WHERE location = 'Germany' AND new_cases > 0;
+
+# This view created contains all dates in Germany, where there are daily new_cases, and the corresponding dates after 21 days, 60 days, and 120 days.
+CREATE VIEW interval_dates (date, total_vac, 21days, 60days, `120days`)
+AS
+SELECT date, total_vac, date + INTERVAL +21 DAY, date + INTERVAL +60 DAY, date + INTERVAL +120 DAY
+FROM total_vac_dates;
+
+# This view created contains the corresponding new_cases for each date 21 days after each date where there are daily new_cases.
+CREATE VIEW 21daysCases (date, 21days, new_cases)
+AS
+SELECT t1.date, 21days, new_cases
+FROM interval_dates t1
+LEFT JOIN cases_dates t2 ON t1.`21days` = t2.date;
+
+# This view created contains the corresponding new_cases for each date 60 days after each date where there are daily new_cases.
+CREATE VIEW 60daysCases (date, 60days, new_cases)
+AS
+SELECT t1.date, 60days, new_cases
+FROM interval_dates t1
+LEFT JOIN cases_dates t2 ON t1.`60days` = t2.date;
+
+# This view created contains the corresponding new_cases for each date 120 days after each date where there are daily new_cases.
+CREATE VIEW 120daysCases (date, 120days, new_cases)
+AS
+SELECT t1.date, 120days, new_cases
+FROM interval_dates t1
+LEFT JOIN cases_dates t2 ON t1.`120days` = t2.date;
+
+# Displays final vaccination effects in Germany
+SELECT t1.date, t4.total_vac AS accumulated_vac, 21days, t1.new_cases AS 21DaysCases, 60days, t2.new_cases AS 60DaysCases
+, 120days, t3.new_cases AS 120DaysCases
+FROM 21daysCases t1,
+60daysCases t2,
+120daysCases t3,
+total_vac_dates t4
+WHERE t1.date = t2.date AND t1.date = t3.date
+AND t1.date = t4.date;
+
+# ---------------------------------------------------------------------------------------------------
