@@ -1,4 +1,8 @@
 # SQL-and-NoSQL-Queries
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/roydonauyr/SQL-and-NoSQL-Queries)
+![GitHub repo size](https://img.shields.io/github/repo-size/roydonauyr/SQL-and-NoSQL-Queries)
+![GitHub language count](https://img.shields.io/github/languages/count/roydonauyr/SQL-and-NoSQL-Queries)
+![GitHub last commit](https://img.shields.io/github/last-commit/roydonauyr/SQL-and-NoSQL-Queries)
 
 In this project, we were tasked with running SQL and NO-SQL Queries on Covid19 data to study how covid19 has affected different countries and the integrity of data.
 
